@@ -1,0 +1,99 @@
+from google.colab import drive
+drive.mount('/content/drive')
+
+# 📌 Gerekli kütüphaneler
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+from wordcloud import WordCloud
+from sklearn.model_selection import train_test_split
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.naive_bayes import MultinomialNB
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import classification_report, confusion_matrix, accuracy_score, roc_curve, auc
+from sklearn.preprocessing import label_binarize
+
+# 📌 1. CSV'den veriyi oku
+df = pd.read_csv("/content/drive/MyDrive/ColabNotebooks/VeriSetleri/temizlenmis_trspam.csv")  # Colab için: dosyayı /content altına yükle
+
+# 📌 2. Etiketleri düzelt
+clean_rows = []
+for _, row in df.iterrows():
+    text = str(row[0])
+    label = str(row[1]).lower().strip()
+    if label not in ['spam', 'ham']:
+        if ',spam' in text:
+            parts = text.split(',spam')
+            clean_rows.append({'Text': parts[0].strip().replace('"', ''), 'Label': 'spam'})
+        elif ',ham' in text:
+            parts = text.split(',ham')
+            clean_rows.append({'Text': parts[0].strip().replace('"', ''), 'Label': 'ham'})
+    else:
+        clean_rows.append({'Text': text.strip().replace('"', ''), 'Label': label})
+
+df_final = pd.DataFrame(clean_rows)
+
+# 📌 3. TF-IDF vektörleştirme
+vectorizer = TfidfVectorizer(max_df=0.9)
+X = vectorizer.fit_transform(df_final['Text'])
+y = df_final['Label']
+
+# 📌 4. Eğitim/test ayrımı
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+# 📌 5. Naive Bayes Modeli
+nb_model = MultinomialNB()
+nb_model.fit(X_train, y_train)
+y_pred_nb = nb_model.predict(X_test)
+
+print("📌 Naive Bayes Sonuçları")
+print("Doğruluk:", accuracy_score(y_test, y_pred_nb))
+print(confusion_matrix(y_test, y_pred_nb))
+print(classification_report(y_test, y_pred_nb))
+
+# 📌 6. Logistic Regression Modeli
+log_model = LogisticRegression(max_iter=1000)
+log_model.fit(X_train, y_train)
+y_pred_log = log_model.predict(X_test)
+
+print("📌 Logistic Regression Sonuçları")
+print("Doğruluk:", accuracy_score(y_test, y_pred_log))
+print(confusion_matrix(y_test, y_pred_log))
+print(classification_report(y_test, y_pred_log))
+
+# 📌 7. Confusion Matrix – Görselleştirme
+plt.figure(figsize=(5, 4))
+sns.heatmap(confusion_matrix(y_test, y_pred_log), annot=True, fmt='d', cmap='Blues',
+            xticklabels=['ham', 'spam'], yticklabels=['ham', 'spam'])
+plt.title("Confusion Matrix - Logistic Regression")
+plt.xlabel("Tahmin")
+plt.ylabel("Gerçek")
+plt.tight_layout()
+plt.show()
+
+# 📌 8. WordCloud – Spam mesajlar için
+spam_text = " ".join(df_final[df_final["Label"] == "spam"]["Text"])
+wordcloud = WordCloud(width=800, height=400, background_color='white').generate(spam_text)
+
+plt.figure(figsize=(10, 5))
+plt.imshow(wordcloud, interpolation='bilinear')
+plt.axis('off')
+plt.title("Spam Mesajlarda En Sık Geçen Kelimeler")
+plt.tight_layout()
+plt.show()
+
+# 📌 9. ROC Eğrisi – Logistic Regression
+y_test_bin = label_binarize(y_test, classes=['ham', 'spam']).ravel()
+y_score = log_model.predict_proba(X_test)[:, 1]
+fpr, tpr, thresholds = roc_curve(y_test_bin, y_score)
+roc_auc = auc(fpr, tpr)
+
+plt.figure(figsize=(6, 5))
+plt.plot(fpr, tpr, color='darkorange', lw=2, label='ROC eğrisi (AUC = %0.2f)' % roc_auc)
+plt.plot([0, 1], [0, 1], color='navy', lw=2, linestyle='--')
+plt.xlabel('False Positive Rate')
+plt.ylabel('True Positive Rate')
+plt.title('ROC Eğrisi - Logistic Regression')
+plt.legend(loc="lower right")
+plt.tight_layout()
+plt.show()
