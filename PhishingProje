@@ -1,0 +1,81 @@
+from google.colab import drive
+drive.mount('/content/drive')
+
+# 1. Gerekli kütüphaneler
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+from sklearn.model_selection import train_test_split
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.naive_bayes import MultinomialNB
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import (
+    classification_report, confusion_matrix, accuracy_score,
+    roc_auc_score, roc_curve
+)
+
+# 2. Veriyi oku
+df = pd.read_csv("/content/drive/MyDrive/ColabNotebooks1/PhishingProje/phishing_email.csv", encoding='ISO-8859-1', low_memory=False)
+
+# 3. Temizlik: Eksik ve boş değerleri çıkar
+df = df.dropna(subset=['text_combined'])
+df = df[df['text_combined'].str.strip() != '']
+
+# 4. Sadece ilk 10000 satırı kullan (bellek dostu)
+df = df.head(10000)
+
+# 5. Metin ve etiketleri hazırla
+X_text = df['text_combined'].astype(str)
+y = df['label']
+
+# 6. TF-IDF vektörleştirme
+vectorizer = TfidfVectorizer(max_df=0.9, stop_words='english')
+X = vectorizer.fit_transform(X_text)
+
+# 7. Eğitim/test bölme
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+# 8. Naive Bayes modeli
+nb_model = MultinomialNB()
+nb_model.fit(X_train, y_train)
+y_pred_nb = nb_model.predict(X_test)
+
+# 9. Logistic Regression modeli
+log_model = LogisticRegression(max_iter=500)
+log_model.fit(X_train, y_train)
+y_pred_log = log_model.predict(X_test)
+
+# 10. Doğruluk skorları
+print("Naive Bayes Doğruluk:", accuracy_score(y_test, y_pred_nb))
+print("Logistic Regression Doğruluk:", accuracy_score(y_test, y_pred_log))
+
+# 11. Classification raporları
+print("\n📌 Naive Bayes Classification Report\n")
+print(classification_report(y_test, y_pred_nb))
+print("\n📌 Logistic Regression Classification Report\n")
+print(classification_report(y_test, y_pred_log))
+
+# 12. Confusion Matrix (Logistic Regression)
+cm = confusion_matrix(y_test, y_pred_log)
+plt.figure(figsize=(5, 4))
+sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', xticklabels=['Ham', 'Phishing'], yticklabels=['Ham', 'Phishing'])
+plt.xlabel("Tahmin")
+plt.ylabel("Gerçek")
+plt.title("Confusion Matrix - Logistic Regression")
+plt.tight_layout()
+plt.show()
+
+# 13. ROC Eğrisi (Logistic Regression)
+y_prob = log_model.predict_proba(X_test)[:, 1]
+fpr, tpr, thresholds = roc_curve(y_test, y_prob)
+roc_auc = roc_auc_score(y_test, y_prob)
+
+plt.figure(figsize=(6, 5))
+plt.plot(fpr, tpr, label=f"ROC Eğrisi (AUC = {roc_auc:.2f})", color="darkorange")
+plt.plot([0, 1], [0, 1], linestyle="--", color="gray")
+plt.xlabel("False Positive Rate")
+plt.ylabel("True Positive Rate")
+plt.title("ROC Eğrisi - Logistic Regression")
+plt.legend(loc="lower right")
+plt.tight_layout()
+plt.show()
